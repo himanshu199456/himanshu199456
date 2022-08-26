@@ -1,0 +1,470 @@
+<?php
+
+class Auth_admin_model extends CI_Model {
+
+    private $User = 'users';
+    private $board_master = 'master_board';
+    private $item_category = 'item_category';
+    private $items_list = 'items_list';
+    private $master_item = 'master_item';
+    private $board_message = 'board_message';
+    private $User_book_record = 'user_book_records';
+    private $Setting = 'setting';
+
+    public function __construct() {
+        parent::__construct();
+        $this->load->helper('security');
+    }
+
+    private function clearString($data){
+        return $this->security->xss_clean(trim($data));
+    }
+
+    #################################################
+    # Function name  : check api login
+    # purpose        : This function is used for checking user
+    # created on     : 05 June 2018
+    # website url    : Webeappmate.com
+    # Author         : Prianka Gupta
+    # Email          : priyanka@webappmate.com
+    ####################################################
+
+    function check_api_login() {
+        $user_data = array();
+        $name = trim($this->input->post('name'));
+        $password = trim($this->input->post('password'));
+        $password = $this->security->xss_clean($password);
+        $condition = array('user_name' => $name, 'password' => md5($password));
+        $this->db->where($condition);
+        $query = $this->db->get('users');
+        $rowcount = $query->num_rows();
+        if ($rowcount > 0) {
+            $user_data = $query->row_array();
+            //print($user_data);
+            unset($user_data['password']);
+            $this->session->set_userdata('logged_in', $query->row_array());
+            // update last login seen update
+            $this->last_login_update($user_data['id']);
+            $ipAddress = $_SERVER['REMOTE_ADDR'];  
+             $data_log = array(
+                    'user_id'=>$user_data['id'],
+                    'ip_address'=>$ipAddress,
+                    'date_time'=>date('Y-m-d H:i:s'),
+                    
+    		); //insert code
+    		$this->db->insert('user_login_log',$data_log);   
+            
+        }
+        return $user_data;
+    }
+
+    #################################################
+    # Function name  : last_login_update
+    # purpose        : only update last seen
+    # created on     : 5 June 2018
+    # website url    : Webeappmate.com
+    # Author         : Priyanka Gupta
+    # Email          : priyanka@webappmate.com
+    ####################################################
+
+    function last_login_update($id = null) {
+        if (!empty($id)) {
+            $id = $this->security->xss_clean($id);
+            $this->db->set('last_login', date('Y-m-d H:i:s'));
+            $this->db->where('id', $id);
+            $this->db->update('users');
+        }
+        return true;
+    }
+
+    ###############  Board  Type ##############
+
+    function getAllBoardItem(){ 
+        $this->db->select('id,board_name');
+        $condition = array('status' => 1);
+        $this->db->where($condition);
+        $query = $this->db->get('master_board');
+        return $query->result();     
+    }
+     
+    #############################################
+
+    function get_master_item_data($cat_id){
+        $this->db->select('*');
+        $condition = array('cat_id' => $cat_id);
+        $this->db->where($condition);
+        return $this->db->get('master_item')->result();
+    }
+
+    ###############  Get user Board  Type ##############
+
+    function getUserBoard($user_id = null){ 
+        $this->db->select('board_id');
+        $condition = array('id' => $user_id);
+        $this->db->where($condition);
+        $board = $this->db->get('users')->row();
+        $boardId = explode(',',$board->board_id);
+        foreach($boardId as $row){
+            $this->db->select('board_name');
+            $this->db->where('id', $row);
+            $board = $this->db->get('master_board')->row();
+            $boardData[$row]  = $board->board_name;
+        }
+        return $boardData;
+    }
+
+    ############### Update Data List ##############
+
+    function get_item_list(){
+        $login_data =$this->session->userdata("logged_in");
+        $this->db->select('item.id,item.tonnes,item.min_rate,item.max_rate,item.board_ids,mitem.eng_item_name,mitem.hindi_item_name');
+        $condition = array('item.status' => 0, 'item.created_by' => $login_data['id']);
+        $this->db->where($condition);
+        $this->db->from('items_list as item');
+        $this->db->join('master_item as mitem', 'item.item_id = mitem.id','Inner');
+        $query = $this->db->get();
+        return $query->result();
+    }
+
+    ################################################
+
+    
+    ############### get scrolling message of board ##############
+
+    function getScrollingMessage($board_id = null){
+        $this->db->select('bmessage.scroll_message,bmessage.language,mboard.board_name');
+        $condition = array('bmessage.status' => 1, 'bmessage.board_id' => $board_id);
+        $this->db->where($condition);
+        $this->db->from('board_message as bmessage');
+        $this->db->join('master_board as mboard', 'bmessage.board_id = mboard.id','Left');
+        $this->db->order_by('language','ASC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+    
+    #############################################################
+
+
+    public function delete_item_list($id){
+        $this->db->where('id', $id);
+        return $this->db->delete('items_list');
+    }
+
+    public function add_item_list(){
+        $login_data =$this->session->userdata("logged_in");
+        $data = array(
+                'item_id'=>$this->clearString($this->input->post('itemId')),
+                'tonnes'=>$this->clearString($this->input->post('tonnes')),
+                'min_rate'=>$this->clearString($this->input->post('min_rate')),
+                'max_rate'=>$this->clearString($this->input->post('max_rate')),
+                'board_ids'=>$this->clearString($this->input->post('boardId')),
+                'status'=>0,
+                'created_date'=>date('Y-m-d H:i:s'),
+                'created_by'=>$login_data['id'],
+            ); //insert code
+        $this->db->insert('items_list',$data);
+        return $this->db->insert_id();
+    }
+
+    public function update_item_list($itemId){
+        $arrItemId = explode(',', $itemId);
+        foreach($arrItemId as $res){
+            if(!empty($res)){
+                $this->db->where('id',$res);
+                $this->db->update('items_list',array('status'=>'1','updated_date'=>date('Y-m-d H:i:s')));
+            }
+        }
+    }
+
+    public function update_board_send_status($boardId){
+        $this->db->where('id',$boardId);
+        $this->db->update('master_board',array('last_data_send_on'=>date('Y-m-d H:i:s'),'send_status'=>'1'));
+    }
+
+    ############### user section start ##############
+     
+    function save_user(){
+        $login_data =$this->session->userdata("logged_in");
+        $password = md5($this->input->post('password'));
+        $arrBoard = $this->input->post('board_id');
+        $boardIds = implode(',',$arrBoard);
+        $data = array(
+                'roll'=>$this->clearString($this->input->post('roll')),
+                'user_name'=>strtolower($this->input->post('user_name')),
+                'password'=>$password,
+                'board_id'=>$boardIds,
+                'p_key' => $this->input->post('password'),
+                'status'=>1
+        ); //insert code
+        return $this->db->insert('users',$data);
+    }
+
+    public function user_delete_row($id){
+        $this->db->where('id', $id);
+        $this->db->delete('users');
+    } 
+
+    function update_user($id = null) {
+        $password = md5($this->input->post('password'));
+        $arrBoard = $this->input->post('board_id');
+        $boardIds = implode(',',$arrBoard);
+        $data = array(
+                'roll'=>$this->clearString($this->input->post('roll')),
+                'user_name'=>strtolower($this->input->post('user_name')),
+                'password'=>$password,
+                'board_id'=>$boardIds,
+                'p_key' => $this->input->post('password')
+        ); //insert code
+        $this->db->where('id', $id);
+        return $this->db->update('users',$data);
+     }
+
+    function get_user_data($user_type){
+        $this->db->select('users.id,users.user_name,users.p_key,user_type.user_type');
+        $this->db->from('users');
+        $this->db->join('user_type', 'users.roll = user_type.id', 'Inner');
+        $condition = array('users.roll' => $user_type);
+        $this->db->where($condition);
+        return $this->db->get()->result();
+    }
+
+    function get_user_detail($user_id){
+        $this->db->select('users.user_name,users.p_key,users.board_id,user_type.user_type');
+        $this->db->from('users');
+        $this->db->join('user_type', 'users.roll = user_type.id', 'Inner');
+        $condition = array('users.id' => $user_id);
+        $this->db->where($condition);
+        return $this->db->get()->row();
+    }
+
+    ############### Commodity type start ##############
+    
+    function save_category_item() {
+        $login_data =$this->session->userdata("logged_in");
+        $data = array(
+                'cat_name'=>$this->clearString($this->input->post('cat_name')),
+                'status'=>1,
+                'created_date'=>date('Y-m-d H:i:s'),
+                'created_by'=>$login_data['id'],
+        ); //insert code
+        return $this->db->insert('item_category',$data);
+    }
+
+    function get_item_category_data(){
+        return $this->db->get('item_category')->result();
+    }
+
+    public function delete_commodity_type($id){
+        $this->db->where('id', $id);
+        return $this->db->delete('item_category');
+    }
+
+    public function update_commodity_type(){
+        $login_data =$this->session->userdata("logged_in");
+        $data = array(
+                'cat_name'=>$this->clearString($this->input->post('type')),
+                'created_date'=>date('Y-m-d H:i:s'),
+                'created_by'=>$login_data['id'],
+        ); //insert 
+        $this->db->where('id', $this->input->post('id'));
+        return $this->db->update('item_category',$data);
+    }
+
+
+    // Fetch records
+    public function getCategoryItem($rowno,$rowperpage) {
+        $this->db->select('*');
+        $this->db->from('item_category');
+        $this->db->limit($rowperpage, $rowno); 
+        $this->db->order_by('cat_name',ASC); 
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    // Select total records
+    public function getCategoryItemCount() {
+        $this->db->select('count(*) as allcount');
+        $this->db->from('item_category');
+        $query = $this->db->get();
+        $result = $query->result_array();
+        return $result[0]['allcount'];
+    }
+
+
+    ############### Commodity Section start ##############
+    
+    function save_commodity() {
+        $login_data =$this->session->userdata("logged_in");
+        $data = array(
+                'cat_id'=>$this->clearString($this->input->post('type')),
+                'eng_item_name'=>$this->clearString($this->input->post('eng_item_name')),
+                'hindi_item_name'=>$this->clearString($this->input->post('hindi_item_name')),
+                'status'=>1,
+                'created_date'=>date('Y-m-d H:i:s'),
+                'created_by'=>$login_data['id'],
+        ); //insert code
+        return $this->db->insert('master_item',$data);
+    }
+
+    public function delete_commodity($id){
+        $this->db->where('id', $id);
+        return $this->db->delete('master_item');
+    }
+
+    public function update_commodity(){
+        $login_data =$this->session->userdata("logged_in");
+        $data = array(
+                'cat_id'=>$this->clearString($this->input->post('category')),
+                'eng_item_name'=>$this->clearString($this->input->post('engItemName')),
+                'hindi_item_name'=>$this->clearString($this->input->post('hinItemName')),
+                'created_date'=>date('Y-m-d H:i:s'),
+                'created_by'=>$login_data['id']
+        ); //insert 
+        $this->db->where('id', $this->input->post('id'));
+        return $this->db->update('master_item',$data);
+    }
+    
+    // Fetch records
+    public function getCommodity($rowno,$rowperpage) {
+        $this->db->select('master_item.*,item_category.cat_name');
+        $this->db->from('master_item');
+        $this->db->join('item_category', 'item_category.id = master_item.cat_id', 'Left');
+        $this->db->limit($rowperpage, $rowno); 
+        $this->db->order_by('master_item.eng_item_name',ASC); 
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    // Select total records
+    public function getCommodityCount() {
+        $this->db->select('count(*) as allcount');
+        $this->db->from('master_item');
+        $query = $this->db->get();
+        $result = $query->result_array();
+        return $result[0]['allcount'];
+    }
+
+    public function board_status(){
+        $this->db->select('id,board_name,last_data_send_on,send_status');
+        $this->db->from('master_board');
+        $query = $this->db->get();
+        return $query->result();
+    }
+
+    public function get_old_password(){
+        $this->db->select('p_key');
+        $this->db->from('users');
+        $this->db->where('id',$this->input->post('user_id'));
+        $query = $this->db->get();
+        return $query->row();    
+    }
+
+    public function update_password(){
+        $new_password = $this->input->post('new_password');
+        $this->db->where('id',$this->input->post('user_id'));
+        return $this->db->update('users',array('password'=>md5($new_password), 'p_key'=>$new_password));
+    }
+
+    public function get_board_message(){
+        $login_data =$this->session->userdata("logged_in");
+        $this->db->select('board_message.id,board_message.language,board_message.scroll_message,master_board.board_name');
+        $this->db->from('board_message');
+        $this->db->where('board_message.created_by',$login_data['id']);
+        $this->db->join('master_board', 'board_message.board_id = master_board.id', 'INNER');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    public function add_message_master(){
+        $login_data =$this->session->userdata("logged_in");
+        $data = array(
+                'board_id'=>$this->input->post('board'),
+                'language'=>$this->input->post('language'),
+                'scroll_message'=>$this->input->post('scroll_message'),
+                'status'=>1,
+                'created_date'=>date('Y-m-d H:i:s'),
+                'created_by'=>$login_data['id']
+        ); //insert code
+        $this->db->insert('board_message',$data);
+    }
+
+    public function update_message_master($boardMessageId){
+        $login_data =$this->session->userdata("logged_in");
+        $data = array(
+                'board_id'=>$this->input->post('board'),
+                'language'=>$this->input->post('language'),
+                'scroll_message'=>$this->input->post('scroll_message'),
+                'created_date'=>date('Y-m-d H:i:s'),
+                'created_by'=>$login_data['id']
+        ); //insert code
+        $this->db->where('id',$boardMessageId);
+        $this->db->update('board_message',$data);
+    }
+    public function delete_message_master($id){
+        $this->db->where('id', $id);
+        return $this->db->delete('board_message');
+    }
+
+    public function message_master_detail($boardMessageId){
+        $this->db->select('*');
+        $this->db->from('board_message');
+        $this->db->where('id',$boardMessageId);
+        $query = $this->db->get();
+        return $query->row();
+    }
+
+    public function check_board_exist(){
+        $board_name = $this->input->post('board_name');
+        $this->db->select('*');
+        $this->db->from('master_board');
+        $this->db->where('board_name',$board_name);
+        $query = $this->db->get();
+        $data = $query->row();
+        if(count($data) > 0){
+            return 1;
+        }
+        else{
+            return 0;
+        }  
+    }
+
+    public function add_board_master(){
+        $login_data =$this->session->userdata("logged_in");
+        $data = array(
+                'board_name'=>$this->input->post('board_name'),
+                'send_status'=>0,
+                'status'=>1,
+                'created_date'=>date('Y-m-d H:i:s'),
+                'created_by'=>$login_data['id']
+        ); //insert code
+        return $this->db->insert('master_board',$data);
+    }
+
+    public function board_detail(){
+        $id = $this->uri->segment(3);
+        $this->db->select('board_name');
+        $this->db->where('id',$id);
+        $query = $this->db->get('master_board');
+        $board = $query->row();
+        return $board->board_name;
+    }
+
+    public function edit_board_master(){
+        $id = $this->uri->segment(3); 
+        $login_data =$this->session->userdata("logged_in");
+        $data = array(
+                'board_name'=>$this->input->post('board_name'),
+                'created_date'=>date('Y-m-d H:i:s'),
+                'created_by'=>$login_data['id']
+        ); //insert code
+        $this->db->where('id',$id);
+        return $this->db->update('master_board',$data);
+    }
+
+    public function delete_master_board($id){
+        $this->db->where('id', $id);
+        return $this->db->delete('master_board');
+    }
+}
+
+

@@ -1,0 +1,53 @@
+@media only screen and (max-width:1200px){
+	.dashboardStatus{
+	  display: inline-block;
+    width: 100%;
+    overflow-x: scroll;
+    }
+		
+}
+
+@media only screen and (max-width:992px){
+	.middle-box h1{
+		font-size:30px;
+		line-height:44px;
+	}
+	
+	
+}
+
+@media only screen and (max-width:767px){
+	 .middle-box h1{
+		 line-height:19px;
+		 font-size: 19px;
+		 }
+	
+}
+
+@media only screen and (max-width:480px){
+	.loginBox {
+		max-width: 405px;
+		min-height: 250px;
+		padding:69px 20px 0 20px;
+		background-size: contain;
+		width:100%;
+  }
+  .loginBox .inPuttx{
+	  width:140px;
+  }
+  .middle-box h1{
+	  margin-top:0px;
+	  font-size:12px;
+	  line-height:35px;
+	 }
+.left-logo{
+	border-right:0px;
+	}
+.right-logo{
+	border-left:0px;
+	}  
+  .loginBox label {
+    width: auto;
+  }
+  
+}
